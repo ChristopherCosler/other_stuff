@@ -1,0 +1,198 @@
+---
+title: "Introduction to ggplot2 for larger amounts of data (and some maps)"
+author: "Christopher Cosler"
+date: "27 M?rz 2017"
+output:
+  beamer_presentation: default
+  ioslides_presentation: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, cache = T, message = F)
+```
+
+```{r, include=F}
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(ggmap)
+```
+
+## What to expect
+
+- Introduction to ggplot2 basics
+- Some example code for plots
+- Recommendations on how to plot larger amounts of data
+- Maps
+- Just some basic knowledge of R is required.
+
+
+
+ggplot2 R Package: authored by Hadley Wickham and based on the "The Grammar of Graphics" by Leland Wilkinson (2005)
+
+ggplot = Grammar of Graphics Plot
+
+(There is also qplot() in ggplot2 as a quick plot function, not covered here)
+
+## Why is it so powerful?
+
+Once you understand the grammer, you can do almost everything. Sounds confusing, will become clear in a second
+
+- Data: you know it, must be stored in R dataframe
+- Coordinate System: 2-D space, usually Cartesian, also map projections, less often polar coordinates
+- Geoms: the geometric object that represents the data, e.g. points, lines, violines...
+- Aesthetics: visual characteristics that represent data, e.g. position, size, color...
+- Scales: the aesthetic has to be converted to display values, e.g. log scales, color scales, size scales...
+- Stats: statistical transformation where needed, e.g. counts, means, regression lines...
+- Facets: split data into groups that are display seperately
+
+## Hands on: get the data
+
+Remember that ggplot2 needs it as a dataframe
+```{r}
+d <- read.csv("train.csv", as.is = T) # Load from you working directory and store in d
+class(d) # Should be a dataframe
+```
+
+Data includes the passengers of the Titanic. Who survived, who died, Name, Sex, Age, Fare...
+
+## Your first try: points
+
+You give it the data and the athetics, then you add the geoms. In this examples the geoms are points.
+```{r}
+ggplot(data = d, mapping = aes(x = Age, y = Fare)) + geom_point()
+```
+
+## Your first try: bars
+
+That simple change allows us to plot it as bars, notice the "identity", which maps the value given, whereas "bin" makes the height of each bar equal to the number of cases.
+
+```{r}
+ggplot(data = d, mapping = aes(x = Age, y = Fare)) + 
+  geom_bar(stat = "identity")
+```
+
+## Your first try: boxplots and some colors
+
+And that is how easy you get boxplots (not sure how useful that is in this case). Noticed how easy it is to use ggplot2 along with dplyr?
+
+```{r}
+d %>% 
+  mutate(ageGroup = cut(Age, breaks = c(seq(0, 100, 20)))) %>% 
+  ggplot(data = ., mapping = aes(x = ageGroup, y = Fare, color = ageGroup)) + 
+  geom_boxplot() +
+  theme(
+    legend.position = "none"
+  )
+```
+
+## What to do if data gets bigger?
+
+- Very complicated topic, for at least two reasons
+- First, your laptop: ggplot2 requires the entire dataframe in memory and plotting many points takes resources.
+- Second, your brain: what good is a plot like that?
+
+```{r}
+data.frame(x = rnorm(n = 1000e2, mean = 0, sd = 1),
+           y = rnorm(n = 1000e2, mean = 0, sd = 1)) %>% 
+  ggplot(aes(x = x, y = y)) + geom_point()
+```
+
+## Data Manipulation to shrink the amount
+
+- Summary measures, densities...
+- Subsetting
+- Faceting
+- Sampling(!)
+- Modeling (regression line)
+
+## Examples using the flight dataset: raw
+
+```{r}
+nycflights13::flights %>% 
+  ggplot(aes(x = distance, y = arr_delay)) + 
+  geom_point()
+```
+
+## With facets
+
+```{r}
+nycflights13::flights %>% 
+  ggplot(aes(x = distance, y = arr_delay)) + 
+  geom_point() +
+  facet_wrap(~ carrier)
+```
+
+## Group, size, transparency
+
+```{r}
+nycflights13::flights %>% 
+  group_by(tailnum) %>%
+  summarise(count = n(), distance = mean(distance), arr_delay = mean(arr_delay)) %>%
+  filter(count > 20, distance < 2000, arr_delay < 50, !is.na(arr_delay)) %>%
+  ggplot(aes(x = distance, y = arr_delay)) +
+  geom_point(aes(size = count), alpha = 1/3) + 
+  scale_size_area(max_size = 3)
+```
+
+## Modeling
+
+```{r}
+nycflights13::flights %>% 
+  group_by(tailnum) %>%
+  summarise(count = n(), distance = mean(distance), arr_delay = mean(arr_delay)) %>%
+  filter(count > 20, distance < 2000, arr_delay < 50, !is.na(arr_delay)) %>%
+  ggplot(aes(x = distance, y = arr_delay)) +
+  geom_point(aes(size = count), alpha = 1/3) + 
+  scale_size_area(max_size = 3) +
+  geom_smooth(method = "loess")
+```
+
+
+# Maps with ggmap
+
+## Violnt crimes data
+```{r}
+d <- crime %>% 
+  subset(offense != "auto theft" & 
+           offense != "theft" & 
+           offense != "burglary")
+str(crime)
+```
+
+## The "map"
+```{r, echo=F}
+get_map(location = "houston", zoom = 14, color = "bw", source = "google") %>% ggmap()
+```
+
+## Add your "data"
+```{r, echo = F}
+get_map(location = "houston", zoom = 14, color = "bw", source = "google") %>% ggmap(legend = "topleft") +
+  geom_point(aes(x = lon, y = lat, colour = offense, size = offense), data = d)
+```
+
+## Densities for "bigger" data
+```{r, echo=F}
+get_map(location = "houston", zoom = 14, color = "bw", source = "google") %>% 
+  ggmap() + 
+  stat_density2d(aes(x = lon, y = lat, fill = ..level.., alpha = ..level..), 
+                 size = 2, bins = 4, data = d,
+                 geom = "polygon")
+
+
+```
+
+## Facetting for apples and oranges
+```{r, echo = F}
+get_map(location = "houston", zoom = 14, color = "bw", source = "google") %>% 
+  ggmap(base_layer = ggplot(aes(x = lon, y = lat), data = d)) + 
+  stat_density2d(aes(x = lon, y = lat, fill = ..level.., alpha = ..level..),
+                 bins = 5, geom = "polygon",
+                 data = d) + 
+  scale_fill_gradient(low = "black", high= "red") +
+  facet_wrap(~ day)
+```
+
+
+
+
